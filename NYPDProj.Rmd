@@ -1,0 +1,87 @@
+---
+title: "NYPD Shooting Incident Data Science Project"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lubridate)
+```
+
+## NYPD Shooting Incident Data (Historic)
+
+List of every shooting incident that occurred in NYC going back to 2006 through the end of the previous calendar year.
+
+This is a breakdown of every shooting incident that occurred in NYC going back to 2006 through the end of the previous calendar year. This data is manually extracted every quarter and reviewed by the Office of Management Analysis and Planning before being posted on the NYPD website. Each record represents a shooting incident in NYC and includes information about the event, the location and time of occurrence. In addition, information related to suspect and victim demographics is also included. This data can be used by the public to explore the nature of shooting/criminal activity. Please refer to the attached data footnotes for additional information about this dataset.
+
+```{r get_nypd_data}
+url_in <- "https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD"
+
+data <- read.csv(url_in)
+```
+
+```{r clean_nypd_data}
+data$OCCUR_DATE <- mdy(data$OCCUR_DATE)
+data$BORO <- as.factor(data$BORO)
+data$PERP_RACE <- as.factor(data$PERP_RACE)
+data$VIC_RACE <- as.factor(data$VIC_RACE)
+data$PERP_AGE_GROUP <- as.factor(data$PERP_AGE_GROUP)
+data$VIC_AGE_GROUP <- as.factor(data$VIC_AGE_GROUP)
+data$PERP_SEX <- as.factor(data$PERP_SEX)
+data$VIC_SEX <- as.factor(data$VIC_SEX)
+
+data$PERP_RACE <- data$PERP_RACE %>% replace(.=="", "UNKNOWN") # replace empty values with UNKNOWN
+
+
+
+summary(data)
+```
+
+```{r plot_nypd_data}
+df <- data %>% count(BORO)
+
+ggplot(df, aes(x = BORO, y = n)) + 
+geom_bar(aes(fill = BORO), stat = "identity", position = "dodge", alpha = 0.5) +
+labs(x="Borough", y="Shooting Incidents", title="Shooting Incidents in NY by \n Borough (2006-2021)", fill = "Borough") +
+theme(plot.title = element_text(hjust = 0.5), axis.text.x = element_text(angle=90, vjust = 0.5, hjust = 1))
+```
+
+Unfortunately, this visualization is biased as we fail to take into account the relative populations of the boroughs.
+According to https://www.citypopulation.de/en/usa/newyorkcity/, in 2021 the populations of the boroughs were:\
+Bronx - 1,424,948\
+Brooklyn - 2,641,052\
+Manhattan - 1,576,876\
+Queens - 2,331,143\
+Staten Island - 493,494\
+\
+We can divide our shooting incidents by these to get relative values.\
+
+```{r fix_nypd_data}
+df$n[1] <- df$n[1] / 1424948 * 100000
+df$n[2] <- df$n[2] / 2641052 * 100000
+df$n[3] <- df$n[3] / 1576876 * 100000
+df$n[4] <- df$n[4] / 2331143 * 100000
+df$n[5] <- df$n[5] / 493494 * 100000
+
+
+ggplot(df, aes(x = BORO, y = n)) + 
+geom_bar(aes(fill = BORO), stat = "identity", position = "dodge", alpha = 0.5) +
+labs(x="Borough", y="Shooting Incidents Per 100,000 People", title="Shooting Incidents in NY by \n Borough (2006-2021) \n Per 100,000 People", fill = "Borough") +
+theme(plot.title = element_text(hjust = 0.5), axis.text.x = element_text(angle=90, vjust = 0.5, hjust = 1))
+```
+
+
+In order to try to explain these numbers, I decided to try to use the median income of the borough as an explanatory variable. I retrieved these values from https://www.baruch.cuny.edu/nycdata/income-taxes/med_hhold_income.htm.
+```{r explanatory_variable}
+df$med_income <- c(37397, 56942, 85071, 64509, 79201)
+
+
+ggplot(df, aes(x = med_income, y = n)) + 
+  geom_point() +
+  stat_smooth(method = "lm", col = "red") +
+  labs(x="Median Income", y="Shooting Incidents Per 100,000 People")
+```
+
+## Conclusion
+The above visualizations seem demonstrate that the Bronx is a relatively more dangerous neighborhood, and that Staten Island is a relatively safe one, using the relative number of shooting incident reports. The above linear regression model seems to indicate that there is a negative correlation between median income and shooting incidents in an area. This isn't definitive, of course, as there is always a potential for bias in both the analysis and the collection of the data itself. I think that I am personally unbiased in regards to New York City neighborhoods, as I have never visited any of them and have relatively little knowledge about their individual cultures. However, it is possible, as previously mentioned, for bias to have been incorporated in the data collection itself: for example, its possible that some of the boroughs of New York have a greater police presence than others, and so more shootings are reported and recorded out of the total number of shooting incidents. As it stands, though, I find that these visualizations and the accompanying analysis paints a good picture of the relative safety of the boroughs.
